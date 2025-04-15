@@ -185,10 +185,33 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         
         // 数据接收回调
+        // 在app.js中的onData回调中添加以下逻辑
         onData: (data) => {
-          logMessage(`收到请求 ${requestId} 的数据`, 'success');
+          // 显示这批数据
+          logMessage(`收到批次 ${data.batchNumber}，进度: ${data.data.progress}%`, 'success');
+          
           // 更新UI显示
-          elements.pushData.textContent = JSON.stringify(data, null, 2);
+          if (data.data.isFinal) {
+            // 最终批次
+            elements.pushData.textContent = JSON.stringify(data, null, 2);
+          } else {
+            // 非最终批次，追加或更新显示
+            try {
+              const currentData = JSON.parse(elements.pushData.textContent);
+              // 合并数据
+              elements.pushData.textContent = JSON.stringify({
+                ...data,
+                data: {
+                  ...data.data,
+                  // 合并之前的结果
+                  results: [...(currentData.data?.results || []), ...data.data.results]
+                }
+              }, null, 2);
+            } catch (e) {
+              // 如果之前没有数据或解析错误，直接显示当前批次
+              elements.pushData.textContent = JSON.stringify(data, null, 2);
+            }
+          }
         },
         
         // 错误回调

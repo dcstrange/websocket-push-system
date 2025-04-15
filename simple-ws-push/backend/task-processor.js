@@ -1,6 +1,8 @@
 // task-processor.js - 处理长时间运行的任务
 
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
 
 /**
  * 任务处理器类 - 模拟异步任务处理
@@ -8,6 +10,8 @@ const { v4: uuidv4 } = require('uuid');
 class TaskProcessor {
   constructor() {
     this.tasks = new Map(); // 存储正在进行的任务
+    // 示例数据文件路径（你需要创建这个文件）
+    this.dataFilePath = path.join(__dirname, 'sample-data.json');
   }
   
   /**
@@ -53,66 +57,176 @@ class TaskProcessor {
     // 更新任务状态
     task.status = 'processing';
     
-    // 模拟随机处理时间（5-15秒）
-    const processingTime = Math.floor(Math.random() * 10000) + 5000;
-    
-    // 使用setTimeout模拟异步处理
-    setTimeout(() => {
-      // 生成结果数据
-      const result = this._generateResult(task, processingTime);
-      
-      // 更新任务状态
-      task.status = 'completed';
-      task.completedAt = Date.now();
-      task.result = result;
-      
-      console.log(`任务 ${taskId} 处理完成，耗时 ${processingTime}ms`);
-      
-      // 调用完成回调
-      onComplete(task.userId, result);
-      
-      // 从Map中移除任务（可选，若需保留历史记录则不移除）
-      // this.tasks.delete(taskId);
-    }, processingTime);
+    // 读取JSON文件
+    this._processJsonFile(task, onComplete);
     
     return true;
   }
   
   /**
-   * 生成任务结果
+   * 处理JSON文件并分批发送数据
    * @private
    * @param {object} task - 任务对象
-   * @param {number} processingTime - 处理时间
-   * @returns {object} - 任务结果
+   * @param {function} onComplete - 回调函数
    */
-  _generateResult(task, processingTime) {
-    // 根据不同的请求类型返回不同的数据结构
-    // 这里是示例数据，实际应用中可根据业务需求生成
-    const { requestId, dataType, options } = task.requestData;
+  _processJsonFile(task, onComplete) {
+    // 检查文件是否存在，如果不存在则创建示例数据
+    if (!fs.existsSync(this.dataFilePath)) {
+      this._createSampleData();
+    }
     
-    return {
-      taskId: task.taskId,
-      status: 'completed',
-      requestId: requestId,
-      timestamp: Date.now(),
-      data: {
-        id: uuidv4(),
-        message: `任务已完成，数据类型: ${dataType}`,
-        processedAt: new Date().toISOString(),
-        processingTime: `${processingTime}ms`,
-        results: {
-          totalItems: Math.floor(Math.random() * 100),
-          processedItems: Math.floor(Math.random() * 100),
-          status: 'success',
-          type: dataType,
-          detailLevel: options?.detail || 'basic',
-          metrics: {
-            score: Math.random() * 100,
-            accuracy: Math.random() * 100
-          }
+    // 读取JSON文件
+    fs.readFile(this.dataFilePath, 'utf8', (err, data) => {
+      if (err) {
+        console.error('读取JSON文件失败:', err);
+        
+        // 通知错误
+        onComplete(task.userId, {
+          taskId: task.taskId,
+          status: 'error',
+          requestId: task.requestData.requestId,
+          error: '读取数据文件失败',
+          timestamp: Date.now()
+        });
+        
+        return;
+      }
+      
+      let jsonData;
+      try {
+        jsonData = JSON.parse(data);
+      } catch (e) {
+        console.error('解析JSON文件失败:', e);
+        
+        // 通知错误
+        onComplete(task.userId, {
+          taskId: task.taskId,
+          status: 'error',
+          requestId: task.requestData.requestId,
+          error: 'JSON解析失败',
+          timestamp: Date.now()
+        });
+        
+        return;
+      }
+      
+      // 开始分批处理数据
+      this._sendDataInBatches(task, jsonData, onComplete);
+    });
+  }
+  
+  /**
+   * 分批发送数据
+   * @private
+   * @param {object} task - 任务对象
+   * @param {object} data - JSON数据
+   * @param {function} onComplete - 回调函数
+   */
+  _sendDataInBatches(task, data, onComplete) {
+    // 如果数据是数组，直接使用；否则将其变成数组
+    const items = Array.isArray(data) ? data : [data];
+    const totalItems = items.length;
+    
+    if (totalItems === 0) {
+      // 没有数据，直接完成
+      onComplete(task.userId, {
+        taskId: task.taskId,
+        status: 'completed',
+        requestId: task.requestData.requestId,
+        message: '没有数据需要处理',
+        timestamp: Date.now(),
+        data: {
+          totalItems: 0,
+          processedItems: 0,
+          results: []
         }
+      });
+      return;
+    }
+    
+    let processedItems = 0;
+    let batchNumber = 0;
+    
+    // 发送第一批数据的函数
+    const sendNextBatch = () => {
+      // 随机决定这一批处理多少项
+      const batchSize = Math.min(
+        totalItems - processedItems,
+        Math.floor(Math.random() * 10) + 1 // 每批1-10个项目
+      );
+      
+      // 提取这一批的数据
+      const batchItems = items.slice(processedItems, processedItems + batchSize);
+      processedItems += batchSize;
+      batchNumber++;
+      
+      // 构建结果对象
+      const result = {
+        taskId: task.taskId,
+        status: processedItems >= totalItems ? 'completed' : 'processing',
+        requestId: task.requestData.requestId,
+        timestamp: Date.now(),
+        batchNumber,
+        data: {
+          totalItems,
+          processedItems,
+          progress: Math.round((processedItems / totalItems) * 100),
+          isFinal: processedItems >= totalItems,
+          results: batchItems
+        }
+      };
+      
+      // 发送这一批数据
+      onComplete(task.userId, result);
+      
+      // 如果还有更多数据，设置超时继续发送
+      if (processedItems < totalItems) {
+        // 随机等待时间，模拟处理时间
+        const delay = Math.floor(Math.random() * 2000) + 500; // 500-2500ms
+        setTimeout(sendNextBatch, delay);
+      } else {
+        // 所有数据已处理完成，更新任务状态
+        task.status = 'completed';
+        task.completedAt = Date.now();
       }
     };
+    
+    // 开始发送第一批
+    sendNextBatch();
+  }
+  
+  /**
+   * 创建示例JSON数据文件
+   * @private
+   */
+  _createSampleData() {
+    console.log('创建示例数据文件...');
+    
+    // 创建一个包含100项的示例数据数组
+    const sampleData = [];
+    for (let i = 0; i < 100; i++) {
+      sampleData.push({
+        id: uuidv4(),
+        name: `项目 ${i + 1}`,
+        value: Math.round(Math.random() * 1000),
+        timestamp: new Date().toISOString(),
+        status: ['进行中', '已完成', '已暂停', '已取消'][Math.floor(Math.random() * 4)],
+        metrics: {
+          accuracy: Math.random().toFixed(2),
+          performance: Math.random().toFixed(2),
+          reliability: Math.random().toFixed(2)
+        }
+      });
+    }
+    
+    // 写入文件
+    fs.writeFileSync(
+      this.dataFilePath,
+      JSON.stringify(sampleData, null, 2),
+      'utf8'
+    );
+    
+    console.log(`示例数据文件已创建: ${this.dataFilePath}`);
   }
   
   /**
