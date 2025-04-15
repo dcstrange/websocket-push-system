@@ -11,7 +11,7 @@ class TaskProcessor {
   constructor() {
     this.tasks = new Map(); // 存储正在进行的任务
     // 示例数据文件路径（你需要创建这个文件）
-    this.dataFilePath = path.join(__dirname, 'sample-data.json');
+    this.dataFilePath = path.join(__dirname, 'export.json');
   }
   
   /**
@@ -62,7 +62,7 @@ class TaskProcessor {
     
     return true;
   }
-  
+    
   /**
    * 处理JSON文件并分批发送数据
    * @private
@@ -92,18 +92,101 @@ class TaskProcessor {
         return;
       }
       
-      let jsonData;
-      try {
-        jsonData = JSON.parse(data);
-      } catch (e) {
-        console.error('解析JSON文件失败:', e);
+      // 处理JSONL格式（每行一个JSON对象）
+      const lines = data.split('\n').filter(line => line.trim() !== '');
+      const jsonData = [];
+      let lineNumber = 0;
+      
+      console.log(`总共读取了 ${lines.length} 行JSON数据`);
+      
+      for (const line of lines) {
+        lineNumber++;
+        try {
+          const obj = JSON.parse(line);
+          jsonData.push(obj);
+        } catch (e) {
+          console.error(`【行 ${lineNumber} 解析失败】`);
+          console.error(`错误类型: ${e.name}`);
+          console.error(`错误消息: ${e.message}`);
+          
+          // 找出可能的错误位置
+          if (e.message.includes('position')) {
+            const posMatch = e.message.match(/position (\d+)/);
+            if (posMatch && posMatch[1]) {
+              const pos = parseInt(posMatch[1]);
+              const start = Math.max(0, pos - 20);
+              const end = Math.min(line.length, pos + 20);
+              console.error(`错误位置附近: "${line.substring(start, pos)}👉${line.substring(pos, end)}"`);
+            }
+          }
+          
+          // 输出行内容片段，避免过长
+          const previewLength = 200;
+          const linePreview = line.length > previewLength 
+            ? line.substring(0, previewLength) + "..." 
+            : line;
+          console.error(`行内容预览: ${linePreview}`);
+          
+          // 尝试检测常见JSON格式问题
+          if (line.includes('\\"')) {
+            console.warn("可能的问题: 字符串中包含转义的引号");
+          }
+          if ((line.match(/"/g) || []).length % 2 !== 0) {
+            console.warn("可能的问题: 引号数量不匹配");
+          }
+          if (line.includes('\\')) {
+            console.warn("可能的问题: 包含反斜杠，可能需要额外转义");
+          }
+          
+          // 尝试简单修复并重新解析
+          let fixedLine = line;
+          
+          // 尝试修复1: 处理结尾多余逗号
+          fixedLine = fixedLine.replace(/,\s*}$/, '}').replace(/,\s*]$/, ']');
+          
+          // 尝试修复2: 处理JSON中的换行符
+          fixedLine = fixedLine.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+          
+          // 检查是否修复成功
+          try {
+            const fixedObj = JSON.parse(fixedLine);
+            console.log(`✅ 自动修复成功! 添加到数据集`);
+            jsonData.push(fixedObj);
+          } catch (fixError) {
+            console.error(`❌ 自动修复失败: ${fixError.message}`);
+            
+            // 保存失败的行到日志文件，方便后续分析
+            try {
+              const logDir = path.join(__dirname, 'logs');
+              if (!fs.existsSync(logDir)) {
+                fs.mkdirSync(logDir);
+              }
+              
+              const logFile = path.join(logDir, 'json_parse_errors.log');
+              fs.appendFileSync(
+                logFile, 
+                `--- 行 ${lineNumber} (${new Date().toISOString()}) ---\n${line}\n\n`,
+                'utf8'
+              );
+              console.log(`已将失败的行保存到: ${logFile}`);
+            } catch (logError) {
+              console.error(`无法保存日志: ${logError.message}`);
+            }
+          }
+        }
+      }
+      
+      console.log(`成功解析了 ${jsonData.length}/${lines.length} 个JSON对象 (${(jsonData.length/lines.length*100).toFixed(2)}%)`);
+      
+      if (jsonData.length === 0) {
+        console.error('没有有效的JSON对象');
         
         // 通知错误
         onComplete(task.userId, {
           taskId: task.taskId,
           status: 'error',
           requestId: task.requestData.requestId,
-          error: 'JSON解析失败',
+          error: '没有有效的JSON数据',
           timestamp: Date.now()
         });
         
@@ -114,6 +197,7 @@ class TaskProcessor {
       this._sendDataInBatches(task, jsonData, onComplete);
     });
   }
+
   
   /**
    * 分批发送数据
