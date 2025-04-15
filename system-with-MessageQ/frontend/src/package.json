@@ -1,0 +1,11 @@
+{
+    "name": "websocket-push-frontend",
+    "version": "1.0.0",
+    "description": "Frontend for WebSocket async data push",
+    "scripts": {
+      "start": "serve src"
+    },
+    "devDependencies": {
+      "serve": "^14.2.0"
+    }
+  }

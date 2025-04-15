@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebSocket Push Demo</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>WebSocket Push Demo</h1>
+    
+    <div class="card">
+      <h2>Connection Status</h2>
+      <div id="connection-status" class="status disconnected">Disconnected</div>
+      
+      <div class="form-section">
+        <h3>Authentication</h3>
+        <form id="login-form">
+          <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" value="user1" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" value="password1" required>
+          </div>
+          
+          <button type="submit" id="login-button">Login</button>
+        </form>
+      </div>
+    </div>
+    
+    <div class="card" id="request-card" style="display: none;">
+      <h2>Request Data</h2>
+      <p>You are logged in as: <span id="logged-user">Not logged in</span></p>
+      
+      <form id="request-form">
+        <div class="form-group">
+          <label for="data-type">Data Type:</label>
+          <select id="data-type" name="dataType">
+            <option value="analysis">Analysis</option>
+            <option value="report">Report</option>
+            <option value="metrics">Metrics</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="detail-level">Detail Level:</label>
+          <select id="detail-level" name="detailLevel">
+            <option value="summary">Summary</option>
+            <option value="basic">Basic</option>
+            <option value="full">Full</option>
+          </select>
+        </div>
+        
+        <button type="submit">Request Data</button>
+      </form>
+    </div>
+    
+    <div class="card">
+      <h2>Messages</h2>
+      <div class="message-container">
+        <div id="messages"></div>
+      </div>
+      <button id="clear-messages">Clear Messages</button>
+    </div>
+    
+    <div class="card">
+      <h2>Received Push Data</h2>
+      <pre id="push-data">No data received yet</pre>
+    </div>
+  </div>
+  
+  <script src="js/websocket-client.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
