@@ -11,7 +11,7 @@ class TaskProcessor {
   constructor() {
     this.tasks = new Map(); // 存储正在进行的任务
     // 示例数据文件路径（你需要创建这个文件）
-    this.dataFilePath = path.join(__dirname, 'export.json');
+    this.dataFilePath = path.join(__dirname, 'data/graph_transformed.json');
   }
   
   /**
