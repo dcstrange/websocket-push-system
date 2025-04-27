@@ -22,7 +22,6 @@ coverage/
 
 # 构建目录
 build/
-dist/
 out/
 
 # 环境变量文件
